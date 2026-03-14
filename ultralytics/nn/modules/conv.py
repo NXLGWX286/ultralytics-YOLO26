@@ -14,7 +14,6 @@ __all__ = (
     "ChannelAttention",
     "Concat",
     "Conv",
-    "SmallObjCBAM",
     "Conv2",
     "ConvTranspose",
     "DWConv",
@@ -24,6 +23,7 @@ __all__ = (
     "Index",
     "LightConv",
     "RepConv",
+    "SmallObjCBAM",
     "SpatialAttention",
 )
 
@@ -64,7 +64,7 @@ class Conv(nn.Module):
             small_obj_opt (bool): 小目标优化（适合烟头、纸屑等小物品）
         """
         super().__init__()
-        
+
         # 【小目标优化】强制小卷积核 + 不小步长，防止小物品特征丢失
         if small_obj_opt:
             k = 2 if k > 2 else k
@@ -572,14 +572,13 @@ class SpatialAttention(nn.Module):
 
 # 新增：小目标轻量化CBAM（专门检测烟头、纸屑、小垃圾）
 class SmallObjCBAM(nn.Module):
-    """轻量化CBAM，适配小目标：缩小空间注意力核 + 精细通道注意力"""
+    """轻量化CBAM，适配小目标：缩小空间注意力核 + 精细通道注意力."""
+
     def __init__(self, c1, kernel_size=3):
         super().__init__()
         # 通道注意力：降维+升维，增强小通道数特征表达
         self.channel_att = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            Conv(c1, c1//2, 1, act=nn.ReLU()),
-            Conv(c1//2, c1, 1, act=nn.Sigmoid())
+            nn.AdaptiveAvgPool2d(1), Conv(c1, c1 // 2, 1, act=nn.ReLU()), Conv(c1 // 2, c1, 1, act=nn.Sigmoid())
         )
         # 空间注意力：3x3核（适配小目标）
         self.spatial_att = SpatialAttention(kernel_size=kernel_size)
