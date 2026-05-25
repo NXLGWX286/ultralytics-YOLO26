@@ -7,11 +7,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ultralytics.nn.modules.block import SPPF, Bottleneck, C2f, Conv
 from ultralytics.utils.torch_utils import fuse_conv_and_bn
 
 from .conv import Conv, DWConv, GhostConv, LightConv, RepConv, autopad
 from .transformer import TransformerBlock
-from ultralytics.nn.modules.block import Conv, Bottleneck, SPPF, C2f
 
 __all__ = (
     "C1",
@@ -20,12 +20,10 @@ __all__ = (
     "C3",
     "C3TR",
     "CIB",
-    "C3k2"
-    "DFL",
+    "C3k2DFL",
     "ELAN1",
     "PSA",
-    "ECA"
-    "SPP",
+    "ECASPP",
     "SPPELAN",
     "SPPF",
     "AConv",
@@ -2069,23 +2067,26 @@ class RealNVP(nn.Module):
         z, log_det = self.backward_p(x)
         return self.prior.log_prob(z) + log_det
 
+
 class ECA(nn.Module):
-    """ECA注意力模块（轻量级通道注意力，适配小目标特征强化）"""
+    """ECA注意力模块（轻量级通道注意力，适配小目标特征强化）."""
+
     def __init__(self, c1: int, k: int = 3):
         super().__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.conv = nn.Conv1d(1, 1, kernel_size=k, padding=k//2, bias=False)
+        self.conv = nn.Conv1d(1, 1, kernel_size=k, padding=k // 2, bias=False)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: [B, C, H, W] -> 全局平均池化 -> 1D卷积建模通道依赖 -> 注意力加权
         y = self.avg_pool(x).squeeze(-1).transpose(-1, -2)  # [B, 1, C]
-        y = self.conv(y).transpose(-1, -2).unsqueeze(-1)    # [B, C, 1, 1]
+        y = self.conv(y).transpose(-1, -2).unsqueeze(-1)  # [B, C, 1, 1]
         return x * self.sigmoid(y)
 
 
 class C3k2(nn.Module):
-    """C3k2模块（YOLO12主干核心，优化跨阶段局部特征融合）"""
+    """C3k2模块（YOLO12主干核心，优化跨阶段局部特征融合）."""
+
     def __init__(self, c1: int, c2: int, n: int = 1, shortcut: bool = True, g: int = 1, e: float = 0.5):
         super().__init__()
         c_ = int(c2 * e)  # 隐藏层通道数
@@ -2100,8 +2101,9 @@ class C3k2(nn.Module):
 
 
 class PSA(nn.Module):
-    """PSA（Partial Self-Attention）部分自注意力模块（轻量化，增强关键特征表达）"""
-    def __init__(self, c1: int, c2: int = None, e: float = 0.5):
+    """PSA（Partial Self-Attention）部分自注意力模块（轻量化，增强关键特征表达）."""
+
+    def __init__(self, c1: int, c2: int | None = None, e: float = 0.5):
         super().__init__()
         c2 = c2 or c1
         self.c = int(c1 * e)
@@ -2113,14 +2115,17 @@ class PSA(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         a = self.cv1(x).flatten(2).permute(0, 2, 1)  # [B, H*W, C]
-        b = self.cv2(x).flatten(2)                   # [B, C, H*W]
-        attn = self.softmax(torch.bmm(a, b) / a.shape[-1]**0.5)  # 注意力矩阵
-        out = torch.bmm(self.cv3(x).flatten(2), attn.permute(0, 2, 1)).reshape(x.shape[0], self.c, x.shape[2], x.shape[3])
+        b = self.cv2(x).flatten(2)  # [B, C, H*W]
+        attn = self.softmax(torch.bmm(a, b) / a.shape[-1] ** 0.5)  # 注意力矩阵
+        out = torch.bmm(self.cv3(x).flatten(2), attn.permute(0, 2, 1)).reshape(
+            x.shape[0], self.c, x.shape[2], x.shape[3]
+        )
         return self.cv4(torch.cat([out, self.cv2(x)], 1))
 
 
 class C2PSA(C2f):
-    """C2f + PSA模块（融合部分自注意力，增强小目标特征表达）"""
+    """C2f + PSA模块（融合部分自注意力，增强小目标特征表达）."""
+
     def __init__(self, c1: int, c2: int, n: int = 1, shortcut: bool = False, g: int = 1, e: float = 0.5):
         super().__init__(c1, c2, n, shortcut, g, e)
         self.c = int(c2 * e)
