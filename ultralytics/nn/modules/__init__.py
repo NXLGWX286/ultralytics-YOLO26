@@ -25,9 +25,9 @@ from .block import (
     C3TR,
     CIB,
     DFL,
+    ECA,
     ELAN1,
     PSA,
-    ECA,
     SPP,
     SPPELAN,
     SPPF,
@@ -66,7 +66,6 @@ from .conv import (
     ChannelAttention,
     Concat,
     Conv,
-    SmallObjCBAM,
     Conv2,
     ConvTranspose,
     DWConv,
@@ -76,6 +75,7 @@ from .conv import (
     Index,
     LightConv,
     RepConv,
+    SmallObjCBAM,
     SpatialAttention,
 )
 from .head import (
